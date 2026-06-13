@@ -1,3 +1,8 @@
+import { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+import { getUserOrg } from './lib/auth';
+import type { Session } from '@supabase/supabase-js';
+
 import { GenieProvider, useGenie } from './lib/store';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
@@ -9,10 +14,10 @@ import InfraPanel from './components/InfraPanel';
 import DashboardPanel from './components/DashboardPanel';
 import ActivityLogPanel from './components/ActivityLogPanel';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
+import Login from './pages/Login';
 import { useMessages } from './hooks/useMessages';
 import { useRFQ } from './hooks/useRFQ';
 
-// Vistas de configuración que no son streams
 const CONFIG_VIEWS = ['dashboard', 'activity', 'connectors', 'agentes', 'infra'];
 
 function WorkstationLayout() {
@@ -92,14 +97,80 @@ function WorkstationLayout() {
   );
 }
 
+type AppState = 'loading' | 'login' | 'onboarding' | 'app';
+
 export default function App() {
-  // TODO: verificar si el org ya completó el onboarding
-  // Por ahora siempre muestra el workstation
-  const showOnboarding = false;
+  const [appState, setAppState] = useState<AppState>('loading');
+
+  useEffect(() => {
+    // Check initial session
+    checkAuthState();
+
+    // Listen for auth changes (e.g. after Google redirect)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        checkOrgState();
+      } else {
+        setAppState('login');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function checkAuthState() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      setAppState('login');
+      return;
+    }
+    await checkOrgState();
+  }
+
+  async function checkOrgState() {
+    try {
+      const userOrg = await getUserOrg();
+      if (!userOrg) {
+        // No org yet — trigger will create it shortly, wait briefly
+        await new Promise(r => setTimeout(r, 1000));
+        const retry = await getUserOrg();
+        if (!retry) {
+          setAppState('onboarding');
+          return;
+        }
+        const org = (retry as any).organizations;
+        setAppState(org?.status === 'onboarding' ? 'onboarding' : 'app');
+        return;
+      }
+      const org = (userOrg as any).organizations;
+      setAppState(org?.status === 'onboarding' ? 'onboarding' : 'app');
+    } catch {
+      setAppState('onboarding');
+    }
+  }
+
+  if (appState === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="text-2xl font-bold text-white">✦ Genie</div>
+          <div className="w-5 h-5 border-2 border-[#7F77DD] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  if (appState === 'login') {
+    return <Login />;
+  }
+
+  if (appState === 'onboarding') {
+    return <OnboardingFlow onComplete={() => setAppState('app')} />;
+  }
 
   return (
     <GenieProvider>
-      {showOnboarding ? <OnboardingFlow /> : <WorkstationLayout />}
+      <WorkstationLayout />
     </GenieProvider>
   );
 }

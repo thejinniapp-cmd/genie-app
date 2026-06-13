@@ -2,7 +2,7 @@ import { RefreshCw } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
 interface TopBarProps {
-  streams: { id: string; nombre: string }[];
+  streams: { id: string; nombre?: string; name?: string }[];
   activeStreamId: string | null;
   onSelectStream: (id: string) => void;
   onCreateStream: () => void;
@@ -25,7 +25,7 @@ export default function TopBar({ streams, activeStreamId, onSelectStream, onCrea
               : 'bg-brain-card text-[#aaa] border-brain-border-dark hover:text-white'
           }`}
         >
-          {s.nombre}
+          {s.nombre || s.name}
         </button>
       ))}
 

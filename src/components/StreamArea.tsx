@@ -5,6 +5,8 @@ import FileUploadCard from './FileUploadCard';
 import RFQChatModule from './RFQChatModule';
 import BulkWidget from './BulkWidget';
 import { supabase } from '../lib/supabase';
+import { streamsApi } from '../lib/api';
+import { useGenie } from '../lib/store';
 
 interface StreamAreaProps {
   stream: Stream | null;
@@ -29,6 +31,7 @@ const FILE_ACCEPT = '.doc,.docx,.xls,.xlsx,.pdf,.png,.jpg,.jpeg,.webp,.mp3,.m4a,
 const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp';
 
 export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onActiveBulkIdChange, onSendMessage, onRFQSubmitted, onCloseRFQMode, onFileUploaded, onDecision, onImagenDecision, onImagenRetry, onManualImageUpload, onParseConfirm, onDocsConfirm, onPublicar }: StreamAreaProps) {
+  const { orgId } = useGenie();
   const [input, setInput] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [pendingDropFile, setPendingDropFile] = useState<File | null>(null);
@@ -71,12 +74,14 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
     const channel = supabase
       .channel(`chat-${stream.id}`)
       .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'mensajes',
+        event: 'INSERT', schema: 'public', table: 'messages',
         filter: `stream_id=eq.${stream.id}`
       }, (payload) => {
         const msg = payload.new as any;
         if (msg.role === 'assistant') {
-          setChatMsgs(prev => [...prev, { role: 'assistant', content: msg.content, ts: Date.now() }]);
+          const content = msg.content;
+          const text = typeof content === 'object' ? content?.text || JSON.stringify(content) : String(content);
+          setChatMsgs(prev => [...prev, { role: 'assistant', content: text, ts: Date.now() }]);
           setClaudeLoading(false);
         }
       })
@@ -86,19 +91,20 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
 
   async function handleSend() {
     const text = input.trim();
-    if (!text) return;
+    if (!text || !stream?.id) return;
     setInput('');
 
     setChatMsgs(prev => [...prev, { role: 'user', content: text, ts: Date.now() }]);
     setClaudeLoading(true);
 
-    if (stream?.id) {
-      await supabase.from('mensajes').insert({
-        stream_id: stream.id,
+    try {
+      // Enviar por el backend — esto dispara el agente automáticamente
+      await streamsApi.postMessage(orgId, stream.id, {
         role: 'user',
-        content: text,
-        procesado: false,
+        content: { type: 'text', text },
       });
+    } catch (err) {
+      console.error('Error enviando mensaje al backend:', err);
     }
 
     onSendMessage(text);

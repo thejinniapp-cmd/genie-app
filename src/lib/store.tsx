@@ -42,26 +42,15 @@ interface GenieStore {
 
 const GenieContext = createContext<GenieStore | null>(null);
 
-// IDs demo — se reemplazan con auth real en producción
-const DEMO_ORG_ID = 'demo-org-001';
-const DEMO_STREAM_1 = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
-const DEMO_STREAM_2 = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+// Org y stream reales creados en Supabase
+const REAL_ORG_ID = '08d459e1-8107-4d0b-b42b-43a7cd19e4e2';
+const REAL_STREAM_ID = 'f7340cf2-3720-4a66-9764-ca9d8432fdfc';
 
-const DEMO_STREAMS: Stream[] = [
+const INITIAL_STREAMS: Stream[] = [
   {
-    id: DEMO_STREAM_1,
-    name: 'RFQ · MRO Master',
-    nombre: 'RFQ · MRO Master',
-    type: 'rfq',
-    tipo: 'compras',
-    status: 'active',
-    config: {},
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: DEMO_STREAM_2,
-    name: 'APQP · Cliente 2',
-    nombre: 'APQP · Cliente 2',
+    id: REAL_STREAM_ID,
+    name: 'Stream Principal',
+    nombre: 'Stream Principal',
     type: 'general',
     tipo: 'general',
     status: 'active',
@@ -72,21 +61,21 @@ const DEMO_STREAMS: Stream[] = [
 
 export function GenieProvider({ children }: { children: ReactNode }) {
   const [org, setOrg] = useState<Organization | null>({
-    id: DEMO_ORG_ID,
-    name: 'MRO Master Pro',
-    slug: 'mro-master-pro',
-    plan: 'pro',
+    id: REAL_ORG_ID,
+    name: 'Genie Test',
+    slug: 'genie-test',
+    plan: 'starter',
     status: 'active',
     created_at: new Date().toISOString(),
   });
-  const [streams, setStreams] = useState<Stream[]>(DEMO_STREAMS);
-  const [activeStreamId, setActiveStreamId] = useState(DEMO_STREAM_1);
+  const [streams, setStreams] = useState<Stream[]>(INITIAL_STREAMS);
+  const [activeStreamId, setActiveStreamId] = useState(REAL_STREAM_ID);
   const [user, setUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<StreamNotification[]>([]);
   const [activeNav, setActiveNav] = useState('new-rfq');
   const [loading, setLoading] = useState(false);
 
-  const orgId = org?.id || DEMO_ORG_ID;
+  const orgId = org?.id || REAL_ORG_ID;
   const activeStream = streams.find(s => s.id === activeStreamId) || null;
   const pendingCount = notifications.filter(n => n.status === 'pending').length;
 

@@ -1,41 +1,48 @@
-import { Plus, Zap } from 'lucide-react';
-import { useGenie } from '../lib/store';
+import { RefreshCw } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
-interface Props { onNewStream: () => void; }
+interface TopBarProps {
+  streams: { id: string; nombre?: string; name?: string }[];
+  activeStreamId: string | null;
+  onSelectStream: (id: string) => void;
+  onCreateStream: () => void;
+}
 
-export default function TopBar({ onNewStream }: Props) {
-  const { streams, activeStreamId, setActiveStreamId } = useGenie();
-
+export default function TopBar({ streams, activeStreamId, onSelectStream, onCreateStream }: TopBarProps) {
   return (
-    <div className="h-11 bg-zinc-950 border-b border-zinc-800 flex items-center px-3 gap-2 flex-shrink-0">
-      {/* Logo */}
-      <div className="flex items-center gap-1.5 mr-3">
-        <Zap size={16} className="text-violet-400" />
-        <span className="text-sm font-semibold text-white">Genie</span>
-      </div>
+    <header className="h-topbar bg-brain-dark flex items-center gap-2 px-4 border-b border-brain-border-dark flex-shrink-0">
+      <span className="text-white text-[13px] font-semibold tracking-wide mr-3 opacity-90 flex items-center gap-1.5">
+        <span className="text-brain-accent">&#x2B21;</span> BRAIN
+      </span>
 
-      {/* Stream tabs */}
-      <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-        {streams.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setActiveStreamId(s.id)}
-            className={`px-3 py-1 rounded text-xs font-medium whitespace-nowrap transition-colors ${
-              s.id === activeStreamId
-                ? 'bg-zinc-700 text-white'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-            }`}
-          >
-            {s.name}
-          </button>
-        ))}
+      {streams.map((s) => (
         <button
-          onClick={onNewStream}
-          className="flex items-center gap-1 px-2 py-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded text-xs transition-colors"
+          key={s.id}
+          onClick={() => onSelectStream(s.id)}
+          className={`px-3 py-1.5 text-[11px] rounded-md border whitespace-nowrap transition-all ${
+            s.id === activeStreamId
+              ? 'bg-brain-border-dark text-white border-[#555]'
+              : 'bg-brain-card text-[#aaa] border-brain-border-dark hover:text-white'
+          }`}
         >
-          <Plus size={12} /> Nuevo stream
+          {s.nombre || s.name}
+        </button>
+      ))}
+
+      <button
+        onClick={onCreateStream}
+        className="px-3 py-1.5 text-[11px] rounded-md border border-dashed border-[#444] text-[#666] hover:text-[#999] hover:border-[#666] transition-colors whitespace-nowrap"
+      >
+        + New Stream
+      </button>
+
+      <div className="ml-auto flex items-center gap-2">
+        <NotificationBell />
+        <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-md bg-brain-card text-brain-accent border border-brain-accent/30 hover:border-brain-accent/60 transition-colors whitespace-nowrap">
+          <RefreshCw className="w-3 h-3" />
+          Connect streams
         </button>
       </div>
-    </div>
+    </header>
   );
 }

@@ -1,73 +1,105 @@
-import { useState } from 'react';
 import { GenieProvider, useGenie } from './lib/store';
-import { streamsApi } from './lib/api';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
-import ChatPanel from './components/ChatPanel';
+import StreamArea from './components/StreamArea';
 import RightPanel from './components/RightPanel';
-import AgentsPanel from './components/AgentsPanel';
 import ConnectorsPanel from './components/ConnectorsPanel';
+import AgentsPanel from './components/AgentsPanel';
+import InfraPanel from './components/InfraPanel';
 import DashboardPanel from './components/DashboardPanel';
-import ActivityPanel from './components/ActivityPanel';
+import ActivityLogPanel from './components/ActivityLogPanel';
+import OnboardingFlow from './components/onboarding/OnboardingFlow';
+import { useMessages } from './hooks/useMessages';
+import { useRFQ } from './hooks/useRFQ';
 
-function App() {
-  const { orgId, activeNav, addStream } = useGenie();
-  const [creating, setCreating] = useState(false);
+// Vistas de configuración que no son streams
+const CONFIG_VIEWS = ['dashboard', 'activity', 'connectors', 'agentes', 'infra'];
 
-  async function handleNewStream() {
-    const name = prompt('Nombre del stream:');
-    if (!name) return;
-    setCreating(true);
-    try {
-      const stream = await streamsApi.create(orgId, { name, type: 'general' }) as any;
-      addStream(stream);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCreating(false);
-    }
+function WorkstationLayout() {
+  const {
+    streams, activeStreamId, activeStream,
+    setActiveStreamId, addStream,
+    activeNav, setActiveNav,
+  } = useGenie();
+
+  const { messages, setMessages, pushLog } = useMessages(activeStreamId);
+  const rfq = useRFQ({ activeStreamId, messages, setMessages, pushLog });
+
+  const isConfigView = CONFIG_VIEWS.includes(activeNav);
+
+  function handleNavSelect(id: string) {
+    setActiveNav(id);
+    if (id === 'new-rfq') rfq.setRfqMode(true);
+    else rfq.setRfqMode(false);
   }
 
-  const centerPanel = {
-    chat:       <ChatPanel />,
-    agents:     <AgentsPanel />,
-    connectors: <ConnectorsPanel />,
-    rag:        <RAGPlaceholder />,
-    dashboard:  <DashboardPanel />,
-    activity:   <ActivityPanel />,
-    settings:   <SettingsPlaceholder />,
-  }[activeNav] ?? <ChatPanel />;
+  function handleCreateStream() {
+    const newStream = {
+      id: crypto.randomUUID(),
+      name: `Stream ${streams.length + 1}`,
+      nombre: `Stream ${streams.length + 1}`,
+      type: 'general',
+      tipo: 'general' as const,
+      status: 'active' as const,
+      config: {},
+      created_at: new Date().toISOString(),
+    };
+    addStream(newStream);
+  }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-zinc-900 overflow-hidden">
-      <TopBar onNewStream={handleNewStream} />
+    <div className="h-screen w-screen flex flex-col overflow-hidden">
+      <TopBar
+        streams={streams}
+        activeStreamId={activeStreamId}
+        onSelectStream={setActiveStreamId}
+        onCreateStream={handleCreateStream}
+      />
       <div className="flex flex-1 min-h-0">
-        <Sidebar />
-        {centerPanel}
-        {activeNav === 'chat' && <RightPanel />}
+        <Sidebar activeNav={activeNav} onNavSelect={handleNavSelect} />
+
+        {activeNav === 'dashboard'   && <DashboardPanel />}
+        {activeNav === 'activity'    && <ActivityLogPanel />}
+        {activeNav === 'connectors'  && <ConnectorsPanel />}
+        {activeNav === 'agentes'     && <AgentsPanel />}
+        {activeNav === 'infra'       && <InfraPanel />}
+
+        {!isConfigView && (
+          <>
+            <StreamArea
+              stream={activeStream}
+              messages={rfq.streamMessages}
+              rfqMode={rfq.rfqMode}
+              bulkRfqIds={rfq.bulkRfqIds}
+              onActiveBulkIdChange={rfq.handleActiveBulkIdChange}
+              onSendMessage={rfq.handleSendMessage}
+              onRFQSubmitted={rfq.handleRFQSubmitted}
+              onCloseRFQMode={() => rfq.setRfqMode(false)}
+              onFileUploaded={rfq.handleFileUploaded}
+              onDecision={rfq.handleDecision}
+              onImagenDecision={rfq.handleImagenDecision}
+              onImagenRetry={rfq.handleImagenRetry}
+              onManualImageUpload={rfq.handleManualImageUpload}
+              onParseConfirm={rfq.handleParseConfirm}
+              onDocsConfirm={rfq.handleDocsConfirm}
+              onPublicar={rfq.handlePublicar}
+            />
+            <RightPanel visible={true} streamId={activeStreamId} />
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function RAGPlaceholder() {
-  return (
-    <div className="flex-1 flex items-center justify-center flex-col gap-3 text-zinc-600">
-      <p className="text-sm">Conocimiento / RAG</p>
-      <p className="text-xs">Próximamente — agrega fuentes de contexto para tus agentes</p>
-    </div>
-  );
-}
+export default function App() {
+  // TODO: verificar si el org ya completó el onboarding
+  // Por ahora siempre muestra el workstation
+  const showOnboarding = false;
 
-function SettingsPlaceholder() {
   return (
-    <div className="flex-1 flex items-center justify-center flex-col gap-3 text-zinc-600">
-      <p className="text-sm">Configuración</p>
-      <p className="text-xs">Ajustes del stream y la organización</p>
-    </div>
+    <GenieProvider>
+      {showOnboarding ? <OnboardingFlow /> : <WorkstationLayout />}
+    </GenieProvider>
   );
-}
-
-export default function Root() {
-  return <GenieProvider><App /></GenieProvider>;
 }

@@ -34,8 +34,7 @@ function WorkstationLayout() {
 
   function handleNavSelect(id: string) {
     setActiveNav(id);
-    if (id === 'new-rfq') rfq.setRfqMode(true);
-    else rfq.setRfqMode(false);
+    rfq.setRfqMode(false);
   }
 
   function handleCreateStream() {

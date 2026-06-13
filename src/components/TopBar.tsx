@@ -12,7 +12,7 @@ export default function TopBar({ streams, activeStreamId, onSelectStream, onCrea
   return (
     <header className="h-topbar bg-brain-dark flex items-center gap-2 px-4 border-b border-brain-border-dark flex-shrink-0">
       <span className="text-white text-[13px] font-semibold tracking-wide mr-3 opacity-90 flex items-center gap-1.5">
-        <span className="text-brain-accent">&#x2B21;</span> BRAIN
+        <span className="text-brain-accent">&#x2B21;</span> Genie
       </span>
 
       {streams.map((s) => (

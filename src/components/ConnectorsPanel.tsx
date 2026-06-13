@@ -14,23 +14,9 @@ interface ConnectorConfig {
 
 const defaultConnectors: ConnectorConfig[] = [
   {
-    id: '1crm',
-    name: '1CRM',
-    description: 'Sincroniza productos, contactos y cotizaciones con tu instancia de 1CRM.',
-    icon: '🏢',
-    status: 'disconnected',
-    fields: [
-      { key: 'base_url', label: 'URL de instancia', placeholder: 'https://tu-empresa.1crmcloud.com', type: 'url' },
-      { key: 'api_key', label: 'API Key', placeholder: 'crm_key_...', type: 'password' },
-      { key: 'username', label: 'Usuario', placeholder: 'admin@empresa.com', type: 'text' },
-    ],
-    values: {},
-    docsUrl: 'https://1crm.com/documentation/api',
-  },
-  {
     id: 'gmail',
     name: 'Gmail',
-    description: 'Envio automatico de cotizaciones y seguimiento de correos.',
+    description: 'Envío y recepción de correos, notificaciones y seguimiento automático.',
     icon: '✉️',
     status: 'disconnected',
     fields: [
@@ -44,7 +30,7 @@ const defaultConnectors: ConnectorConfig[] = [
   {
     id: 'drive',
     name: 'Google Drive',
-    description: 'Almacenamiento de fichas tecnicas, cotizaciones y archivos adjuntos.',
+    description: 'Almacenamiento de archivos, documentos y adjuntos del equipo.',
     icon: '📁',
     status: 'disconnected',
     fields: [
@@ -56,16 +42,17 @@ const defaultConnectors: ConnectorConfig[] = [
     docsUrl: 'https://developers.google.com/drive/api',
   },
   {
-    id: 'removebg',
-    name: 'Remove.bg',
-    description: 'Remocion automatica de fondo para imagenes de productos.',
-    icon: '🖼️',
+    id: 'whatsapp',
+    name: 'WhatsApp Business',
+    description: 'Comunicación con clientes y notificaciones vía WhatsApp.',
+    icon: '💬',
     status: 'disconnected',
     fields: [
-      { key: 'api_key', label: 'API Key', placeholder: 'rbg_...', type: 'password' },
+      { key: 'phone_number_id', label: 'Phone Number ID', placeholder: '123456789012345', type: 'text' },
+      { key: 'access_token', label: 'Access Token', placeholder: 'EAABs...', type: 'password' },
     ],
     values: {},
-    docsUrl: 'https://www.remove.bg/api',
+    docsUrl: 'https://developers.facebook.com/docs/whatsapp',
   },
   {
     id: 'supabase',

@@ -72,7 +72,7 @@ export function GenieProvider({ children }: { children: ReactNode }) {
   const [activeStreamId, setActiveStreamId] = useState(REAL_STREAM_ID);
   const [user, setUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<StreamNotification[]>([]);
-  const [activeNav, setActiveNav] = useState('new-rfq');
+  const [activeNav, setActiveNav] = useState('stream');
   const [loading, setLoading] = useState(false);
 
   const orgId = org?.id || REAL_ORG_ID;

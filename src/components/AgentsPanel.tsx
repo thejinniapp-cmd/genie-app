@@ -22,103 +22,31 @@ const modelOptions = [
   { value: 'claude-opus-4-20250414', label: 'Claude Opus 4' },
 ];
 
-const defaultAgents: AgentConfig[] = [
-  {
-    id: 'lector',
-    name: 'Lector',
-    description: 'Lee y extrae datos de documentos, fichas tecnicas y PDFs adjuntos.',
-    status: 'ok',
-    model: 'claude-sonnet-4-20250514',
-    systemPrompt: 'Eres un agente especializado en lectura y extraccion de datos de documentos tecnicos. Extrae informacion clave como marca, modelo, especificaciones, precios y disponibilidad.',
-    temperature: 0.2,
-    maxTokens: 4096,
-    timeout: 30,
-    railwayUrl: 'https://lector-production.up.railway.app',
-    active: true,
-  },
-  {
-    id: 'buscador',
-    name: 'Buscador',
-    description: 'Busca productos y proveedores en fuentes externas y catalogo interno.',
-    status: 'running',
-    model: 'claude-sonnet-4-20250514',
-    systemPrompt: 'Eres un agente de busqueda especializado en productos industriales MRO. Busca en el catalogo interno y fuentes externas para encontrar las mejores opciones de precio y disponibilidad.',
-    temperature: 0.3,
-    maxTokens: 4096,
-    timeout: 45,
-    railwayUrl: 'https://buscador-production.up.railway.app',
-    active: true,
-  },
-  {
-    id: 'imagen',
-    name: 'Imagen',
-    description: 'Procesa imagenes de productos, remueve fondos y optimiza para catalogo.',
-    status: 'waiting',
-    model: 'claude-haiku-4-20250414',
-    systemPrompt: 'Eres un agente de procesamiento de imagenes. Evalua la calidad de las imagenes de productos, coordina la remocion de fondo con Remove.bg, y valida que cumplan los estandares del catalogo.',
-    temperature: 0.1,
-    maxTokens: 2048,
-    timeout: 60,
-    railwayUrl: 'https://imagen-production.up.railway.app',
-    active: true,
-  },
-  {
-    id: 'ficha',
-    name: 'Ficha',
-    description: 'Genera fichas tecnicas estructuradas a partir de la informacion recopilada.',
-    status: 'waiting',
-    model: 'claude-sonnet-4-20250514',
-    systemPrompt: 'Eres un agente que genera fichas tecnicas de productos industriales. Estructura la informacion en formato estandarizado incluyendo: descripcion, especificaciones, aplicaciones, certificaciones y condiciones comerciales.',
-    temperature: 0.4,
-    maxTokens: 8192,
-    timeout: 30,
-    railwayUrl: 'https://ficha-production.up.railway.app',
-    active: true,
-  },
-  {
-    id: 'publicador',
-    name: 'Publicador',
-    description: 'Publica productos finalizados al CRM y notifica al equipo.',
-    status: 'waiting',
-    model: 'claude-haiku-4-20250414',
-    systemPrompt: 'Eres un agente de publicacion. Tu trabajo es tomar fichas tecnicas finalizadas y publicarlas en el CRM (1CRM), generar notificaciones al equipo y confirmar que el registro quedo correcto.',
-    temperature: 0.1,
-    maxTokens: 2048,
-    timeout: 20,
-    railwayUrl: 'https://publicador-production.up.railway.app',
-    active: true,
-  },
-];
-
 const useAgentMonitor = () => {
   const [recentJobs, setRecentJobs] = useState<any[]>([]);
-  const [agentStatus, setAgentStatus] = useState<Record<string, string>>({
-    buscador: 'waiting',
-    imagen: 'waiting',
-  });
+  const [agentStatus, setAgentStatus] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchJobs = async () => {
       const { data } = await supabase
         .from('jobs')
-        .select('id, agente, estado, created_at, started_at, finished_at, error, output, log, rfq_id, rfqs(marca, modelo)')
-        .in('agente', ['buscador', 'imagen', 'notificador'])
+        .select('id, agent_type, status, created_at, started_at, finished_at, error, output')
         .order('created_at', { ascending: false })
         .limit(30);
 
       if (!data) return;
       setRecentJobs(data);
 
-      const status: Record<string, string> = {};
-      ['buscador', 'imagen'].forEach((agente) => {
-        const last = data.find((j: any) => j.agente === agente);
-        if (!last) status[agente] = 'waiting';
-        else if (last.estado === 'corriendo') status[agente] = 'running';
-        else if (last.estado === 'fallido') status[agente] = 'error';
-        else if (last.estado === 'completado') status[agente] = 'ok';
-        else status[agente] = 'waiting';
+      const statusMap: Record<string, string> = {};
+      data.forEach((j: any) => {
+        if (!statusMap[j.agent_type]) {
+          if (j.status === 'running') statusMap[j.agent_type] = 'running';
+          else if (j.status === 'failed') statusMap[j.agent_type] = 'error';
+          else if (j.status === 'completed') statusMap[j.agent_type] = 'ok';
+          else statusMap[j.agent_type] = 'waiting';
+        }
       });
-      setAgentStatus(status);
+      setAgentStatus(statusMap);
     };
 
     fetchJobs();
@@ -130,17 +58,15 @@ const useAgentMonitor = () => {
 };
 
 export default function AgentsPanel() {
-  const [agents, setAgents] = useState<AgentConfig[]>(defaultAgents);
+  const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creatingNew, setCreatingNew] = useState(false);
   const { recentJobs, agentStatus } = useAgentMonitor();
 
-  const liveAgents = agents.map((a) => {
-    if (a.id === 'buscador' || a.id === 'imagen') {
-      return { ...a, status: (agentStatus[a.id] || a.status) as AgentConfig['status'] };
-    }
-    return a;
-  });
+  const liveAgents = agents.map((a) => ({
+    ...a,
+    status: (agentStatus[a.id] || a.status) as AgentConfig['status'],
+  }));
 
   const editingAgent = liveAgents.find((a) => a.id === editingId);
 
@@ -209,7 +135,20 @@ export default function AgentsPanel() {
       {/* Agent list */}
       <div className="flex-1 overflow-y-auto p-6 pt-3 scrollbar-light">
         <div className="grid gap-3 max-w-2xl">
-          {liveAgents.map((agent) => (
+          {liveAgents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Bot className="w-10 h-10 text-[#ddd] mb-3" />
+              <p className="text-[13px] font-medium text-gray-500">Sin agentes configurados</p>
+              <p className="text-[11px] text-[#aaa] mt-1 mb-4">Crea tu primer agente para empezar a automatizar tareas</p>
+              <button
+                onClick={() => setCreatingNew(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-white bg-[#059669] rounded-lg hover:bg-[#047857] transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Crear primer agente
+              </button>
+            </div>
+          ) : liveAgents.map((agent) => (
             <AgentCard
               key={agent.id}
               agent={agent}
@@ -233,22 +172,17 @@ export default function AgentsPanel() {
             {recentJobs.map((job) => (
               <div key={job.id} className="bg-white border border-brain-border rounded-lg p-3 text-xs">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium capitalize text-gray-900">{job.agente}</span>
+                  <span className="font-medium capitalize text-gray-900">{job.agent_type}</span>
                   <span className={`px-2 py-0.5 rounded-full font-medium ${
-                    job.estado === 'completado' ? 'bg-emerald-100 text-emerald-700' :
-                    job.estado === 'corriendo'  ? 'bg-blue-100 text-blue-700' :
-                    job.estado === 'fallido'    ? 'bg-red-100 text-red-700' :
-                    job.estado === 'foto_pendiente' ? 'bg-amber-100 text-amber-700' :
+                    job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                    job.status === 'running'   ? 'bg-blue-100 text-blue-700' :
+                    job.status === 'failed'    ? 'bg-red-100 text-red-700' :
+                    job.status === 'pending'   ? 'bg-amber-100 text-amber-700' :
                     'bg-gray-100 text-gray-500'
                   }`}>
-                    {job.estado}
+                    {job.status}
                   </span>
                 </div>
-                {job.rfqs && (
-                  <p className="text-[#888]">
-                    {job.rfqs.marca} — {job.rfqs.modelo}
-                  </p>
-                )}
                 {job.error && (
                   <p className="text-red-500 mt-1 truncate" title={job.error}>
                     {job.error}

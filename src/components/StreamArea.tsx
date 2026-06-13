@@ -35,7 +35,7 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
   const [input, setInput] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [pendingDropFile, setPendingDropFile] = useState<File | null>(null);
-  const [chatMsgs, setChatMsgs] = useState<{role:'user'|'assistant', content:string, ts:number}[]>([]);
+  const [dbMsgs, setDbMsgs] = useState<{id:string, role:'user'|'assistant', content:string, created_at:string}[]>([]);
   const [claudeLoading, setClaudeLoading] = useState(false);
   const dragCounter = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,7 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [dbMsgs, claudeLoading]);
 
   useEffect(() => {
     const channel = supabase
@@ -69,8 +69,30 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
     return () => { supabase.removeChannel(channel); };
   }, [onActiveBulkIdChange]);
 
+  // Load history + subscribe to new messages from Supabase messages table
   useEffect(() => {
     if (!stream?.id) return;
+    setDbMsgs([]);
+
+    // Fetch historical messages
+    supabase
+      .from('messages')
+      .select('id, role, content, created_at')
+      .eq('stream_id', stream.id)
+      .order('created_at', { ascending: true })
+      .limit(50)
+      .then(({ data }) => {
+        if (data) {
+          setDbMsgs(data.map((m: any) => ({
+            id: m.id,
+            role: m.role,
+            content: typeof m.content === 'object' ? m.content?.text || JSON.stringify(m.content) : String(m.content),
+            created_at: m.created_at,
+          })));
+        }
+      });
+
+    // Subscribe to new messages
     const channel = supabase
       .channel(`chat-${stream.id}`)
       .on('postgres_changes', {
@@ -78,12 +100,12 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
         filter: `stream_id=eq.${stream.id}`
       }, (payload) => {
         const msg = payload.new as any;
-        if (msg.role === 'assistant') {
-          const content = msg.content;
-          const text = typeof content === 'object' ? content?.text || JSON.stringify(content) : String(content);
-          setChatMsgs(prev => [...prev, { role: 'assistant', content: text, ts: Date.now() }]);
-          setClaudeLoading(false);
-        }
+        const text = typeof msg.content === 'object' ? msg.content?.text || JSON.stringify(msg.content) : String(msg.content);
+        setDbMsgs(prev => {
+          if (prev.find(m => m.id === msg.id)) return prev;
+          return [...prev, { id: msg.id, role: msg.role, content: text, created_at: msg.created_at }];
+        });
+        if (msg.role === 'assistant') setClaudeLoading(false);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -94,7 +116,7 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
     if (!text || !stream?.id) return;
     setInput('');
 
-    setChatMsgs(prev => [...prev, { role: 'user', content: text, ts: Date.now() }]);
+    setDbMsgs(prev => [...prev, { id: `optimistic-${Date.now()}`, role: 'user', content: text, created_at: new Date().toISOString() }]);
     setClaudeLoading(true);
 
     try {
@@ -328,53 +350,66 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
         </div>
       </div>
 
-      {/* Messages area */}
+      {/* Messages area — unified single feed */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-light py-6">
         <div className="max-w-2xl mx-auto px-6 space-y-4">
-          {messages.map((msg) => {
-            if (msg.tipo === 'rfq-form') {
-              return null;
-            }
 
+          {/* Chat messages from Supabase messages table */}
+          {dbMsgs.map((msg) => (
+            <div key={msg.id} className={`flex items-end gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {msg.role === 'assistant' && (
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-brain-accent flex items-center justify-center">
+                  <span className="text-white text-[11px] font-bold">&#x2B21;</span>
+                </div>
+              )}
+              <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
+                msg.role === 'user'
+                  ? 'bg-[#4A3F8F] text-white rounded-br-sm'
+                  : 'bg-white border border-brain-border text-gray-800 rounded-bl-sm'
+              }`} style={{ whiteSpace: 'pre-wrap' }}>
+                {msg.content}
+              </div>
+              {msg.role === 'user' && (
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-brain-border flex items-center justify-center">
+                  <span className="text-[12px] font-medium text-[#555]">A</span>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Typing indicator */}
+          {claudeLoading && (
+            <div className="flex items-end gap-3 justify-start">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-brain-accent flex items-center justify-center">
+                <span className="text-white text-[11px] font-bold">&#x2B21;</span>
+              </div>
+              <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-brain-border">
+                <div className="flex gap-1 items-center">
+                  <span className="w-1.5 h-1.5 bg-[#999] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-[#999] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-[#999] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MRO widgets (legacy) */}
+          {messages.map((msg) => {
+            if (['rfq-form', 'text', 'sistema'].includes(msg.tipo)) return null;
             const msgRfqId = (msg.contenido as any)?.rfq_id;
             const isBulkSuppressed = msgRfqId && bulkRfqIds.has(msgRfqId);
-            if (isBulkSuppressed && ['widget', 'decision', 'rfq-status', 'imagen_lista', 'imagen_fallida', 'rfq-log'].includes(msg.tipo)) {
-              return null;
-            }
-
-            if (msg.tipo === 'file-upload') {
-              return <FileUploadCard key={msg.id} contenido={msg.contenido as { name?: string; type?: string; size?: number; url?: string }} />;
-            }
-            if (msg.tipo === 'bulk-widget') {
-              const bId = (msg.contenido as { bulk_id?: string })?.bulk_id;
-              if (bId) return <BulkWidget key={msg.id} bulkId={bId} />;
-              return null;
-            }
-            if (msg.tipo === 'widget') {
-              return <RFQWidget key={msg.id} message={msg} onPublicar={onPublicar} />;
-            }
-            if (msg.tipo === 'decision') {
-              return <DecisionWidget key={msg.id} message={msg} onDecision={onDecision} />;
-            }
-            if (msg.tipo === 'imagen_lista') {
-              return <ImagenListaWidget key={msg.id} message={msg} onDecision={onImagenDecision} />;
-            }
-            if (msg.tipo === 'imagen_fallida') {
-              return <ImagenFallidaWidget key={msg.id} message={msg} onRetry={onImagenRetry} onManualUpload={onManualImageUpload} />;
-            }
-            if (msg.tipo === 'parse_confirm') {
-              return <ParseConfirmWidget key={msg.id} message={msg} onConfirm={onParseConfirm} />;
-            }
-            if (msg.tipo === 'docs_parsed') {
-              return <DocsProductsWidget key={msg.id} message={msg} onConfirm={onDocsConfirm} />;
-            }
-            if (msg.tipo === 'rfq-status') {
-              return <RFQStatusWidget key={msg.id} message={msg} />;
-            }
-            if (msg.tipo === 'rfq-log') {
-              return <RFQLogBubble key={msg.id} message={msg} />;
-            }
-            return <MessageBubble key={msg.id} message={msg} />;
+            if (isBulkSuppressed && ['widget', 'decision', 'rfq-status', 'imagen_lista', 'imagen_fallida', 'rfq-log'].includes(msg.tipo)) return null;
+            if (msg.tipo === 'file-upload') return <FileUploadCard key={msg.id} contenido={msg.contenido as { name?: string; type?: string; size?: number; url?: string }} />;
+            if (msg.tipo === 'bulk-widget') { const bId = (msg.contenido as { bulk_id?: string })?.bulk_id; if (bId) return <BulkWidget key={msg.id} bulkId={bId} />; return null; }
+            if (msg.tipo === 'widget') return <RFQWidget key={msg.id} message={msg} onPublicar={onPublicar} />;
+            if (msg.tipo === 'decision') return <DecisionWidget key={msg.id} message={msg} onDecision={onDecision} />;
+            if (msg.tipo === 'imagen_lista') return <ImagenListaWidget key={msg.id} message={msg} onDecision={onImagenDecision} />;
+            if (msg.tipo === 'imagen_fallida') return <ImagenFallidaWidget key={msg.id} message={msg} onRetry={onImagenRetry} onManualUpload={onManualImageUpload} />;
+            if (msg.tipo === 'parse_confirm') return <ParseConfirmWidget key={msg.id} message={msg} onConfirm={onParseConfirm} />;
+            if (msg.tipo === 'docs_parsed') return <DocsProductsWidget key={msg.id} message={msg} onConfirm={onDocsConfirm} />;
+            if (msg.tipo === 'rfq-status') return <RFQStatusWidget key={msg.id} message={msg} />;
+            if (msg.tipo === 'rfq-log') return <RFQLogBubble key={msg.id} message={msg} />;
+            return null;
           })}
 
         </div>
@@ -398,33 +433,6 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
         onChange={(e) => { handleFilesSelected(e.target.files); e.target.value = ''; }}
       />
 
-      {/* Claude chat messages */}
-      {chatMsgs.length > 0 && (
-        <div className="px-4 py-3 space-y-3 border-t border-[#1f1f1f]">
-          {chatMsgs.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-xl px-3 py-2 text-[12px] leading-relaxed ${
-                m.role === 'user'
-                  ? 'bg-[#1a1a2e] text-[#ccc] rounded-br-sm'
-                  : 'bg-[#141414] border border-[#2a2a2a] text-[#ddd] rounded-bl-sm'
-              }`}>
-                {m.role === 'assistant' && (
-                  <span className="text-[9px] text-[#555] block mb-1">Brain AI</span>
-                )}
-                <span style={{ whiteSpace: 'pre-wrap' }}>{m.content}</span>
-              </div>
-            </div>
-          ))}
-          {claudeLoading && (
-            <div className="flex justify-start">
-              <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl rounded-bl-sm px-3 py-2">
-                <span className="text-[9px] text-[#555] block mb-1">Brain AI</span>
-                <span className="text-[11px] text-[#666] animate-pulse">Procesando...</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Chatbox zone - switches between normal chat and RFQ module */}
       {rfqMode ? (

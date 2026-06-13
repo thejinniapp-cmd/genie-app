@@ -103,17 +103,19 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>('loading');
 
   useEffect(() => {
-    // Check initial session
-    checkAuthState();
-
-    // Listen for auth changes (e.g. after Google redirect)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
+    // Listen for auth changes FIRST (before checking session)
+    // This catches the OAuth redirect token exchange
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[Auth] event:', event, 'session:', !!session);
+      if (event === 'SIGNED_IN' && session) {
         checkOrgState();
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setAppState('login');
       }
     });
+
+    // Also check current session (for page reloads)
+    checkAuthState();
 
     return () => subscription.unsubscribe();
   }, []);

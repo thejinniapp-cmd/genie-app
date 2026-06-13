@@ -321,9 +321,9 @@ export default function StreamArea({ stream, messages, rfqMode, bulkRfqIds, onAc
       {/* Header */}
       <div className="border-b border-brain-border bg-white flex-shrink-0 py-3">
         <div className="max-w-2xl mx-auto px-6 flex items-center gap-3">
-          <h2 className="text-[14px] font-semibold text-gray-900">RFQ Flow &middot; MRO Master Pro</h2>
+          <h2 className="text-[14px] font-semibold text-gray-900">{stream?.nombre || stream?.name || 'Stream'}</h2>
           <span className="text-[10px] font-medium text-brain-accent border border-brain-accent/30 bg-brain-accent-soft px-2.5 py-0.5 rounded-full">
-            Agente Buscador activo
+            Agente activo
           </span>
         </div>
       </div>

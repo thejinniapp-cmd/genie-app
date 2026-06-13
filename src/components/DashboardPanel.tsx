@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Zap, HardDrive, Cpu, DollarSign, Package, Clock, Users, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, Zap, HardDrive, Cpu, DollarSign, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 function MiniChart({ data, color, height = 40 }: { data: number[]; color: string; height?: number }) {
@@ -118,9 +118,6 @@ function timeAgo(dateStr: string): string {
 
 export default function DashboardPanel() {
   const [resources, setResources] = useState<ResourceRow[]>([]);
-  const [rfqsActivos, setRfqsActivos] = useState<number | null>(null);
-  const [rfqsUrgentes, setRfqsUrgentes] = useState<number | null>(null);
-  const [rfqsMes, setRfqsMes] = useState<number | null>(null);
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [completadosHoy, setCompletadosHoy] = useState<number | null>(null);
   const [totalCorriendo, setTotalCorriendo] = useState<number | null>(null);
@@ -137,7 +134,6 @@ export default function DashboardPanel() {
   async function fetchAll() {
     await Promise.all([
       fetchResources(),
-      fetchRfqs(),
       fetchJobs(),
       fetchNotifications(),
       fetchExchangeRate(),
@@ -149,38 +145,10 @@ export default function DashboardPanel() {
     if (data) setResources(data);
   }
 
-  async function fetchRfqs() {
-    const { count: activos } = await supabase
-      .from('rfqs')
-      .select('id', { count: 'exact', head: true })
-      .neq('estado', 'publicado');
-    setRfqsActivos(activos ?? 0);
-
-    const { count: urgentes } = await supabase
-      .from('rfqs')
-      .select('id', { count: 'exact', head: true })
-      .eq('urgente', true)
-      .neq('estado', 'publicado');
-    setRfqsUrgentes(urgentes ?? 0);
-
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    const { count: mes } = await supabase
-      .from('rfqs')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', startOfMonth.toISOString());
-    setRfqsMes(mes ?? 0);
-  }
-
   async function fetchJobs() {
-    const agentes = ['lector', 'buscador', 'imagen', 'ficha', 'publicador'];
-    const colors = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ec4899'];
-    const names = ['Lector', 'Buscador', 'Imagen', 'Ficha', 'Publicador'];
-
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('agente, estado, finished_at');
+      .select('agent_type, status, finished_at');
 
     if (!jobs) return;
 
@@ -188,20 +156,28 @@ export default function DashboardPanel() {
     today.setHours(0, 0, 0, 0);
     const todayIso = today.toISOString();
 
-    const stats: AgentStats[] = agentes.map((ag, i) => {
-      const agJobs = jobs.filter(j => j.agente === ag);
-      return {
-        name: names[i],
-        active: agJobs.filter(j => j.estado === 'corriendo').length,
-        queue: agJobs.filter(j => j.estado === 'pendiente').length,
-        color: colors[i],
-      };
-    });
+    // Build dynamic agent stats from whatever agents exist in jobs
+    const agentMap = new Map<string, { active: number; queue: number }>();
+    for (const j of jobs) {
+      const key = j.agent_type || 'unknown';
+      if (!agentMap.has(key)) agentMap.set(key, { active: 0, queue: 0 });
+      const entry = agentMap.get(key)!;
+      if (j.status === 'running') entry.active++;
+      if (j.status === 'pending') entry.queue++;
+    }
+
+    const palette = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ec4899', '#3b82f6'];
+    const stats: AgentStats[] = Array.from(agentMap.entries()).map(([name, v], i) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      active: v.active,
+      queue: v.queue,
+      color: palette[i % palette.length],
+    }));
     setAgentStats(stats);
 
-    setCompletadosHoy(jobs.filter(j => j.estado === 'completado' && j.finished_at && j.finished_at >= todayIso).length);
-    setTotalCorriendo(jobs.filter(j => j.estado === 'corriendo').length);
-    setTotalPendiente(jobs.filter(j => j.estado === 'pendiente').length);
+    setCompletadosHoy(jobs.filter(j => j.status === 'completed' && j.finished_at && j.finished_at >= todayIso).length);
+    setTotalCorriendo(jobs.filter(j => j.status === 'running').length);
+    setTotalPendiente(jobs.filter(j => j.status === 'pending').length);
   }
 
   async function fetchNotifications() {
@@ -230,24 +206,10 @@ export default function DashboardPanel() {
   const tokensHoy = getResource('anthropic', 'tokens_hoy');
   const storageGb = getResource('supabase', 'storage_gb');
   const agentesActivos = getResource('railway', 'servicios_activos');
-  const serpApiRestantes = getResource('serpapi', 'busquedas_restantes');
-  const serpApiUsadas = getResource('serpapi', 'busquedas_usadas_mes');
-  const removeBg = getResource('removebg', 'creditos_restantes');
-  const googleCse = getResource('google_cse', 'llamadas_hoy');
-
-  const crmProductos = getResource('1crm', 'productos_total');
-  const crmProveedores = getResource('1crm', 'proveedores_total');
 
   const tokensVal = tokensHoy?.valor != null ? Math.round(tokensHoy.valor).toLocaleString() : '--';
   const storageVal = storageGb?.valor != null ? `${storageGb.valor.toFixed(1)} GB` : '--';
   const agentesVal = agentesActivos ? `${Math.round(agentesActivos.valor || 0)} / ${Math.round(agentesActivos.limite || 0)}` : '--';
-
-  const serpLimite = serpApiUsadas?.limite || 100;
-  const serpUsado = serpLimite - (serpApiRestantes?.valor ?? serpLimite);
-  const serpColor = serpApiRestantes?.estado === 'critical' ? '#ef4444' : serpApiRestantes?.estado === 'warning' ? '#f59e0b' : '#10b981';
-
-  const removeBgUsado = 50 - (removeBg?.valor ?? 50);
-  const googleCseVal = googleCse?.valor ?? 0;
 
   const agenteLimite = agentesActivos?.limite ?? 5;
   const agenteValor = agentesActivos?.valor ?? 0;
@@ -257,7 +219,7 @@ export default function DashboardPanel() {
       {/* Header */}
       <div className="px-6 py-5 border-b border-[#1f1f1f]">
         <h2 className="text-[15px] font-semibold text-white">Dashboard</h2>
-        <p className="text-[11px] text-[#666] mt-0.5">Brain - MRO Master Pro - Vista general</p>
+        <p className="text-[11px] text-[#666] mt-0.5">Vista general de la organización</p>
       </div>
 
       <div className="p-6 space-y-6">
@@ -313,12 +275,12 @@ export default function DashboardPanel() {
                       />
                       <span className="text-[7px] text-[#555]">{agent.name[0]}</span>
                     </div>
-                  )) : ['L', 'B', 'I', 'F', 'P'].map((l) => (
-                    <div key={l} className="flex-1 flex flex-col items-center gap-0.5">
+                  )) : (
+                    <div className="flex-1 flex flex-col items-center gap-0.5">
                       <div className="w-full rounded-sm h-[10%] bg-[#3b82f6] opacity-30" />
-                      <span className="text-[7px] text-[#555]">{l}</span>
+                      <span className="text-[7px] text-[#555]">-</span>
                     </div>
-                  ))}
+                  )}
                 </div>
               }
             />
@@ -342,24 +304,24 @@ export default function DashboardPanel() {
             </div>
             <div className="bg-[#141414] border border-[#1f1f1f] rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] text-[#888]">Remove.bg</span>
-                <span className="text-[11px] font-semibold text-[#06b6d4]">{removeBg?.valor ?? '--'} restantes</span>
+                <span className="text-[11px] text-[#888]">Storage</span>
+                <span className="text-[11px] font-semibold text-[#06b6d4]">{storageVal}</span>
               </div>
-              <BarChart data={removeBg?.valor != null ? [removeBgUsado * 0.5, removeBgUsado * 0.7, removeBgUsado] : []} color="#06b6d4" />
+              <BarChart data={storageGb?.valor != null ? [storageGb.valor * 0.5, storageGb.valor * 0.7, storageGb.valor] : []} color="#06b6d4" />
               <div className="flex justify-between mt-2 text-[9px] text-[#555]">
-                <span>{removeBgUsado} usados</span>
-                <span>50/mes</span>
+                <span>Supabase</span>
+                <span>{storageGb?.estado || '--'}</span>
               </div>
             </div>
             <div className="bg-[#141414] border border-[#1f1f1f] rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] text-[#888]">SerpAPI</span>
-                <span className="text-[11px] font-semibold" style={{ color: serpColor }}>{serpApiRestantes?.valor ?? '--'} restantes</span>
+                <span className="text-[11px] text-[#888]">Agentes activos</span>
+                <span className="text-[11px] font-semibold text-[#3b82f6]">{agentesVal}</span>
               </div>
-              <BarChart data={serpUsado > 0 ? [serpUsado * 0.4, serpUsado * 0.7, serpUsado] : []} color={serpColor} />
+              <BarChart data={agentStats.length > 0 ? agentStats.map(a => a.active) : [0]} color="#3b82f6" />
               <div className="flex justify-between mt-2 text-[9px] text-[#555]">
-                <span>{serpUsado} usadas</span>
-                <span>{serpLimite}/mes</span>
+                <span>Railway</span>
+                <span>{agentesActivos?.estado || '--'}</span>
               </div>
             </div>
           </div>
@@ -371,26 +333,53 @@ export default function DashboardPanel() {
           <div className="bg-[#141414] border border-[#1f1f1f] rounded-xl p-5 flex items-center justify-around flex-wrap gap-3">
             <DonutChart value={storageGb?.valor ?? 0} max={1} color="#f59e0b" label="Storage (1 GB)" />
             <DonutChart value={tokensHoy?.valor ?? 0} max={100000} color="#10b981" label="Tokens (100k)" />
-            <DonutChart value={rfqsMes ?? 0} max={50} color="#06b6d4" label="RFQs / mes (50)" />
-            <DonutChart value={serpUsado} max={serpLimite} color={serpColor} label={`SerpAPI (${serpLimite}/mes)`} />
-            <DonutChart value={removeBgUsado} max={50} color="#06b6d4" label="Remove.bg (50/mes)" />
-            <DonutChart value={googleCseVal} max={100} color="#f59e0b" label="Google CSE (100/dia)" />
             <DonutChart value={agenteValor} max={agenteLimite} color="#3b82f6" label={`Agentes (${agenteLimite})`} />
+          </div>
+        </section>
+
+        {/* Section: Pipeline Status */}
+        <section>
+          <p className="text-[9px] font-semibold text-[#555] uppercase tracking-widest mb-3">Pipeline - Estado actual</p>
+          <div className="bg-[#141414] border border-[#1f1f1f] rounded-xl p-5">
+            {agentStats.length > 0 ? (
+              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${agentStats.length}, minmax(0, 1fr))` }}>
+                {agentStats.map((agent) => (
+                  <div key={agent.name} className="flex flex-col items-center">
+                    <div
+                      className="w-full h-16 rounded-lg flex items-end justify-center pb-1 relative overflow-hidden"
+                      style={{ backgroundColor: `${agent.color}10`, border: `1px solid ${agent.color}30` }}
+                    >
+                      <div
+                        className="absolute bottom-0 left-0 right-0 transition-all"
+                        style={{
+                          height: `${agent.active + agent.queue > 0 ? (agent.active / (agent.active + agent.queue)) * 100 : 0}%`,
+                          backgroundColor: `${agent.color}30`,
+                        }}
+                      />
+                      <span className="relative text-[14px] font-bold" style={{ color: agent.color }}>
+                        {agent.active}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-[#888] mt-1.5 font-medium">{agent.name}</span>
+                    <span className="text-[9px] text-[#555]">{agent.queue} en cola</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-[#555] text-center py-4">Sin agentes activos</p>
+            )}
+            <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-[#1f1f1f]">
+              <span className="text-[9px] text-[#555]">En proceso: <span className="text-white font-medium">{totalCorriendo ?? '--'}</span></span>
+              <span className="text-[9px] text-[#555]">En cola: <span className="text-white font-medium">{totalPendiente ?? '--'}</span></span>
+              <span className="text-[9px] text-[#555]">Completados hoy: <span className="text-[#10b981] font-medium">{completadosHoy ?? '--'}</span></span>
+            </div>
           </div>
         </section>
 
         {/* Section: Business KPIs */}
         <section>
           <p className="text-[9px] font-semibold text-[#555] uppercase tracking-widest mb-3">Negocio - KPIs Clave</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            <BusinessCard
-              icon={Package}
-              label="RFQs activos"
-              value={rfqsActivos != null ? String(rfqsActivos) : '--'}
-              subtitle={rfqsUrgentes != null ? `${rfqsUrgentes} urgentes` : '--'}
-              color="#10b981"
-              chart={<BarChart data={rfqsActivos != null ? [rfqsActivos * 0.5, rfqsActivos * 0.7, rfqsActivos] : []} color="#10b981" height={36} />}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <BusinessCard
               icon={Clock}
               label="Completados hoy"
@@ -401,61 +390,12 @@ export default function DashboardPanel() {
             />
             <BusinessCard
               icon={TrendingUp}
-              label="Productos publicados"
-              value={crmProductos?.valor != null ? String(Math.round(crmProductos.valor)) : '--'}
-              subtitle="Catalogo 1CRM"
+              label="Jobs totales"
+              value={(totalCorriendo != null && totalPendiente != null) ? String(totalCorriendo + totalPendiente) : '--'}
+              subtitle="Corriendo + en cola"
               color="#f59e0b"
-              chart={<MiniChart data={crmProductos?.valor != null ? [0, crmProductos.valor] : [0, 0]} color="#f59e0b" height={36} />}
+              chart={<MiniChart data={[0, (totalCorriendo ?? 0) + (totalPendiente ?? 0)]} color="#f59e0b" height={36} />}
             />
-            <BusinessCard
-              icon={Users}
-              label="Proveedores activos"
-              value={crmProveedores?.valor != null ? String(Math.round(crmProveedores.valor)) : '--'}
-              subtitle="1CRM"
-              color="#ec4899"
-              chart={<BarChart data={crmProveedores?.valor != null ? [crmProveedores.valor * 0.5, crmProveedores.valor * 0.8, crmProveedores.valor] : []} color="#ec4899" height={36} />}
-            />
-          </div>
-        </section>
-
-        {/* Section: Pipeline Status */}
-        <section>
-          <p className="text-[9px] font-semibold text-[#555] uppercase tracking-widest mb-3">Pipeline - Estado actual</p>
-          <div className="bg-[#141414] border border-[#1f1f1f] rounded-xl p-5">
-            <div className="grid grid-cols-5 gap-2">
-              {(agentStats.length > 0 ? agentStats : [
-                { name: 'Lector', active: 0, queue: 0, color: '#10b981' },
-                { name: 'Buscador', active: 0, queue: 0, color: '#06b6d4' },
-                { name: 'Imagen', active: 0, queue: 0, color: '#f59e0b' },
-                { name: 'Ficha', active: 0, queue: 0, color: '#8b5cf6' },
-                { name: 'Publicador', active: 0, queue: 0, color: '#ec4899' },
-              ]).map((agent) => (
-                <div key={agent.name} className="flex flex-col items-center">
-                  <div
-                    className="w-full h-16 rounded-lg flex items-end justify-center pb-1 relative overflow-hidden"
-                    style={{ backgroundColor: `${agent.color}10`, border: `1px solid ${agent.color}30` }}
-                  >
-                    <div
-                      className="absolute bottom-0 left-0 right-0 transition-all"
-                      style={{
-                        height: `${agent.active + agent.queue > 0 ? (agent.active / (agent.active + agent.queue)) * 100 : 0}%`,
-                        backgroundColor: `${agent.color}30`,
-                      }}
-                    />
-                    <span className="relative text-[14px] font-bold" style={{ color: agent.color }}>
-                      {agent.active}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[#888] mt-1.5 font-medium">{agent.name}</span>
-                  <span className="text-[9px] text-[#555]">{agent.queue} en cola</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-[#1f1f1f]">
-              <span className="text-[9px] text-[#555]">Total en proceso: <span className="text-white font-medium">{totalCorriendo ?? '--'}</span></span>
-              <span className="text-[9px] text-[#555]">En cola: <span className="text-white font-medium">{totalPendiente ?? '--'}</span></span>
-              <span className="text-[9px] text-[#555]">Completados hoy: <span className="text-[#10b981] font-medium">{completadosHoy ?? '--'}</span></span>
-            </div>
           </div>
         </section>
 
@@ -465,7 +405,7 @@ export default function DashboardPanel() {
           <div className="bg-[#141414] border border-[#1f1f1f] rounded-xl divide-y divide-[#1f1f1f]">
             {notifications.length > 0 ? notifications.map((item, i) => {
               const status = item.tipo === 'error' ? 'error'
-                : (item.tipo === 'foto_pendiente' || item.tipo === 'imagen_fallida') ? 'warn'
+                : item.tipo === 'warn' ? 'warn'
                 : 'ok';
               return (
                 <div key={i} className="px-4 py-2.5 flex items-center gap-3">

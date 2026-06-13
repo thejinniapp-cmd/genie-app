@@ -30,25 +30,13 @@ interface AgentInfo {
   status: AgentStatus;
 }
 
-const AGENT_DEFS = [
-  { name: 'Lector', key: 'lector' },
-  { name: 'Buscador', key: 'buscador' },
-  { name: 'Imagen', key: 'imagen' },
-  { name: 'Ficha', key: 'ficha' },
-  { name: 'Publicador', key: 'publicador' },
-];
+const AGENT_DEFS: { name: string; key: string }[] = [];
 
-
-const defaultFuentes: Source[] = [
-  { icon: '\u{1F517}', name: '1CRM Product Catalog', type: 'link' },
-  { icon: '\u{1F517}', name: '1CRM Proveedores', type: 'link' },
-  { icon: '\u{1F310}', name: 'Google Search', type: 'link' },
-];
+const defaultFuentes: Source[] = [];
 
 const infra = [
   { name: 'Railway', status: 'online' },
   { name: 'Supabase', status: 'online' },
-  { name: 'Remove.bg', status: 'ok' },
 ];
 
 const statusColors = {

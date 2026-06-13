@@ -6,7 +6,7 @@ interface SidebarProps {
 }
 
 const kpis = [
-  { value: '12', label: 'RFQs activos', highlight: true },
+  { value: '--', label: 'Jobs activos', highlight: true },
   { value: '$0.84', label: 'Costo/llamada', highlight: false },
   { value: '4.2k', label: 'Tokens hoy', highlight: false },
   { value: '2.1 GB', label: 'Storage', highlight: false },
@@ -44,10 +44,10 @@ export default function Sidebar({ activeNav, onNavSelect }: SidebarProps) {
       <Divider />
 
       {/* Use case */}
-      <NavSection title="Use case - MRO">
-        <NavItem icon={FileText} label="New RFQ" id="new-rfq" active={activeNav === 'new-rfq'} onClick={onNavSelect} />
-        <NavItem icon={Package} label="Ordenes" id="ordenes" active={activeNav === 'ordenes'} onClick={onNavSelect} />
-        <NavItem icon={FolderOpen} label="Catalogo" id="catalogo" active={activeNav === 'catalogo'} onClick={onNavSelect} />
+      <NavSection title="Use case">
+        <NavItem icon={FileText} label="Nuevo caso" id="new-rfq" active={activeNav === 'new-rfq'} onClick={onNavSelect} />
+        <NavItem icon={Package} label="Órdenes" id="ordenes" active={activeNav === 'ordenes'} onClick={onNavSelect} />
+        <NavItem icon={FolderOpen} label="Catálogo" id="catalogo" active={activeNav === 'catalogo'} onClick={onNavSelect} />
       </NavSection>
 
       <Divider />
@@ -64,13 +64,11 @@ export default function Sidebar({ activeNav, onNavSelect }: SidebarProps) {
       {/* Config */}
       <NavSection title="Config">
         <NavItem icon={Plug} label="Connectors" id="connectors" active={activeNav === 'connectors'} onClick={onNavSelect} />
-        <NavSub>1CRM - Gmail - Drive</NavSub>
-        <NavSub>Remove.bg - Supabase</NavSub>
+        <NavSub>APIs externas</NavSub>
         <NavItem icon={Bot} label="Agentes" id="agentes" active={activeNav === 'agentes'} onClick={onNavSelect} />
-        <NavSub>Lector - Buscador</NavSub>
-        <NavSub>Imagen - Ficha - Publicador</NavSub>
+        <NavSub>Configurar agentes</NavSub>
         <NavItem icon={Cloud} label="Infraestructura" id="infra" active={activeNav === 'infra'} onClick={onNavSelect} />
-        <NavSub>Railway - Hostinger</NavSub>
+        <NavSub>Railway · Supabase</NavSub>
         <NavSub>Modelos IA</NavSub>
       </NavSection>
     </aside>
